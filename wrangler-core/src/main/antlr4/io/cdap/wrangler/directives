@@ -1,1 +1,69 @@
+package io.cdap.wrangler.directives;
 
+import io.cdap.wrangler.api.Directive;
+import io.cdap.wrangler.api.Row;
+import io.cdap.wrangler.api.annotation.Category;
+import io.cdap.wrangler.api.annotation.Description;
+import io.cdap.wrangler.api.annotation.Name;
+import io.cdap.wrangler.api.annotation.Scope;
+import io.cdap.wrangler.api.parser.ColumnName;
+import io.cdap.wrangler.api.parser.DirectiveInfo;
+import io.cdap.wrangler.api.parser.Text;
+import io.cdap.wrangler.api.parser.TokenType;
+import io.cdap.wrangler.api.parser.Type;
+import io.cdap.wrangler.api.parser.DirectiveParseException;
+import io.cdap.wrangler.api.parser.Arguments;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * A custom directive that calculates and appends aggregate stats (min, max, avg) of a numeric column.
+ */
+@DirectiveInfo(
+  name = "aggregate-stats",
+  usage = "aggregate-stats <column>",
+  arguments = {@Type(ColumnName.class)},
+  description = "Calculates min, max, and avg for a given column and appends it as new columns.",
+  scope = Scope.COLUMN,
+  categories = {Category.STATISTICAL}
+)
+public class AggregateStats implements Directive {
+  private String column;
+
+  @Override
+  public void initialize(Arguments arguments) throws DirectiveParseException {
+    column = arguments.value("column");
+  }
+
+  @Override
+  public List<Row> execute(List<Row> rows) {
+    double min = Double.MAX_VALUE;
+    double max = Double.MIN_VALUE;
+    double sum = 0;
+    int count = 0;
+
+    for (Row row : rows) {
+      Object val = row.getValue(column);
+      if (val instanceof Number) {
+        double num = ((Number) val).doubleValue();
+        min = Math.min(min, num);
+        max = Math.max(max, num);
+        sum += num;
+        count++;
+      }
+    }
+
+    double avg = count > 0 ? sum / count : 0;
+
+    List<Row> newRows = new ArrayList<>();
+    for (Row row : rows) {
+      Row newRow = new Row(row);
+      newRow.add(column + "_min", min);
+      newRow.add(column + "_max", max);
+      newRow.add(column + "_avg", avg);
+      newRows.add(newRow);
+    }
+    return newRows;
+  }
+}
